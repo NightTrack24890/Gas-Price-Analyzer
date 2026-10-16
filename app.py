@@ -361,26 +361,15 @@ if st.button("Fetch live station prices", type="primary"):
                     "coordinates, price type, and the provider's current schema."
                 )
             else:
-                # Keep the current search separate from the full history.
-                st.session_state["current_search_results"] = live.copy()
-                st.session_state["current_search_coords"] = (
-                    float(latitude),
-                    float(longitude),
-                    float(radius_miles),
-                    price_type,
-                )
-
-                # Still save observations for historical simulations.
                 history = pd.concat([history, live], ignore_index=True)
                 history = history.drop_duplicates(
                     subset=["station_id", "observed_at", "price_type"],
                     keep="last",
                 )
                 history.to_csv(HISTORY_FILE, index=False)
-
                 st.success(
-                    f"Fetched {len(live)} stations for "
-                    f"{latitude:.4f}, {longitude:.4f}."
+                    f"Saved {len(live)} station observations to "
+                    f"{HISTORY_FILE.resolve()}."
                 )
                 st.rerun()
         except requests.RequestException as exc:
@@ -400,42 +389,27 @@ if history.empty:
     )
     st.stop()
 
-# Display the latest search results when available.
-# Use saved history only when this session has not searched yet.
-current_coords = (
-    float(latitude),
-    float(longitude),
-    float(radius_miles),
-    price_type,
+# Show latest observation per station, using the requested price type when possible.
+history = history.sort_values("observed_at")
+latest = history.groupby("station_id", as_index=False).tail(1).copy()
+
+latest["reported_at"] = pd.to_datetime(
+    latest["reported_at"], utc=True, errors="coerce"
 )
+now = pd.Timestamp.now(tz="UTC")
+latest["report_age_hours"] = (
+    now - latest["reported_at"]
+).dt.total_seconds() / 3600
 
-saved_coords = st.session_state.get("current_search_coords")
-
-if (
-    "current_search_results" in st.session_state
-    and saved_coords == current_coords
-):
-    latest = st.session_state["current_search_results"].copy()
-
-elif saved_coords is not None and saved_coords != current_coords:
-    st.info(
-        "Your search settings changed. Click 'Fetch live station prices' "
-        "to load stations for the new location."
-    )
-    latest = pd.DataFrame(columns=HISTORY_COLUMNS)
-
-else:
-    # First visit in this session: use saved records that have coordinates.
-    latest = (
-        history.sort_values("observed_at")
-        .groupby("station_id", as_index=False)
-        .tail(1)
-        .copy()
-    )
-    latest = latest[
-        latest["latitude"].notna()
-        & latest["longitude"].notna()
-    ].copy()
+latest["report_status"] = np.select(
+    [
+        latest["report_age_hours"].isna(),
+        latest["report_age_hours"] <= 24,
+        latest["report_age_hours"] <= 72,
+    ],
+    ["Unknown", "Recent", "Aged"],
+    default="Stale",
+)
 
 if np.isfinite(latitude) and np.isfinite(longitude):
     coords_ok = latest["latitude"].notna() & latest["longitude"].notna()
@@ -446,24 +420,13 @@ if np.isfinite(latitude) and np.isfinite(longitude):
         axis=1,
     )
 
-if latest.empty:
-    st.warning(
-        "No stations are available for these search settings. "
-        "Click 'Fetch live station prices' to search this location."
-    )
-    st.stop()
-
 nearby = latest[
-    latest["distance_miles"].notna()
-    & (latest["distance_miles"] <= radius_miles)
+    latest["distance_miles"].isna()
+    | (latest["distance_miles"] <= radius_miles)
 ].copy()
 
 if nearby.empty:
-    st.warning(
-        "No returned stations have verified coordinates within the "
-        f"{radius_miles}-mile radius. The provider may not be returning "
-        "station coordinates, or its search may not support this location."
-    )
+    st.warning("No stations remain in the selected radius.")
     st.stop()
 
 forecasts = []
