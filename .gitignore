@@ -218,3 +218,19 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Private API credentials
+.env
+.streamlit/secrets.toml
+
+# Local station history
+station_prices.csv
+
+# Python environment and cache
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# VS Code settings
+.vscode/
