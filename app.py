@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 st.set_page_config(
-    page_title="Gas Price Monte Carlo Simulator",
+    page_title="Gas Price Simulator",
     page_icon="⛽",
     layout="wide",
 )
@@ -241,8 +241,7 @@ def simulate_prices(history, station_id, days_ahead=30, n_sims=5000, seed=42):
     """
     Historical-return bootstrap Monte Carlo model.
 
-    Requires >= 10 distinct daily price observations and >= 9 returns.
-    Simulated paths are scenarios, not guaranteed or calibrated forecasts.
+    NOT YET WORKING
     """
     station_history = history[
         history["station_id"].astype(str) == str(station_id)
@@ -340,7 +339,6 @@ with st.sidebar:
     )
     st.caption(
         "Replace the example coordinates with your own. Live provider "
-        "requests may cost money; check your provider account first."
     )
 
 history = load_history()
